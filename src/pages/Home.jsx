@@ -204,18 +204,31 @@ export default function Home() {
               <MapClickHandler modalType={modalType} setTempMarker={setTempMarker} />
             </MapContainer>
 
-           {/* Map Legend - Left center with glassy effect */}
-<div className="absolute left-4 top-1/2 transform -translate-y-1/2 z-50">
-  <div className="bg-white/30 backdrop-blur-sm p-3 rounded-lg shadow-lg border border-white/20">
+           {/* Map Legend - Top left (below navbar) */}
+<div className="absolute left-4 top-20 z-50">
+  <div className="bg-white/40 backdrop-blur-md p-3 rounded-lg shadow-lg border border-white/30">
     <h3 className="text-sm font-semibold mb-2">Urgency Legend</h3>
     <ul className="text-xs space-y-1">
-      <li><span className="inline-block w-3 h-3 bg-red-500 rounded-full mr-2"></span>High Urgency (Priority)</li>
-      <li><span className="inline-block w-3 h-3 bg-orange-500 rounded-full mr-2"></span>Medium Urgency</li>
-      <li><span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-2"></span>Low Urgency</li>
-      <li><span className="inline-block w-3 h-3 bg-blue-500 rounded-full mr-2"></span>Temporary Pin</li>
+      <li>
+        <span className="inline-block w-3 h-3 bg-red-500 rounded-full mr-2"></span>
+        High (Priority)
+      </li>
+      <li>
+        <span className="inline-block w-3 h-3 bg-orange-500 rounded-full mr-2"></span>
+        Medium
+      </li>
+      <li>
+        <span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-2"></span>
+        Low
+      </li>
+      <li>
+        <span className="inline-block w-3 h-3 bg-blue-500 rounded-full mr-2"></span>
+        Temporary Pin
+      </li>
     </ul>
   </div>
 </div>
+
 
 
 
