@@ -44,6 +44,9 @@ const RequestHelpModal = ({ formData, setFormData, onClose, onSubmit, transparen
             onChange={handleChange}
             className="w-full p-2 border rounded"
           >
+            <option value="" disabled>
+              Urgency Level
+            </option>
             <option value="Low">Low</option>
             <option value="Medium">Medium</option>
             <option value="High">High</option>

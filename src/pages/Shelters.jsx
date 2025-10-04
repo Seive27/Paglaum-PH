@@ -4,6 +4,7 @@ import { supabase } from "../services/supabase";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Home, Plus, X, Info } from "lucide-react";
+import SuccessModal from "../components/SuccessModal"; // Import SuccessModal
 
 // Shelter marker
 const shelterIcon = new L.Icon({
@@ -43,6 +44,7 @@ export default function Shelters() {
     capacity: "",
     status: "Available",
   });
+  const [showSuccess, setShowSuccess] = useState(false); // State to control SuccessModal
   const mapRef = useRef();
 
   useEffect(() => {
@@ -86,7 +88,7 @@ export default function Shelters() {
     ]);
 
     if (!error) {
-      alert("✅ Shelter added successfully!");
+      setShowSuccess(true); // Show SuccessModal on success
       fetchShelters();
       setAddMode(false);
       setNewLocation(null);
@@ -111,18 +113,18 @@ export default function Shelters() {
       <div className="relative flex-1 h-full">
         {/* Instruction banner */}
         {addMode && !newLocation && (
-  <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-yellow-200 text-yellow-800 px-4 py-2 rounded-lg shadow-md flex items-center gap-2 text-sm md:text-base">
-    <Info size={18} />
-    Click on the map to choose a location for the new shelter.
-  </div>
-)}
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-yellow-200 text-yellow-800 px-4 py-2 rounded-lg shadow-md flex items-center gap-2 text-sm md:text-base">
+            <Info size={18} />
+            Click on the map to choose a location for the new shelter.
+          </div>
+        )}
 
-{/* Instruction 2: Fill in details after selecting location */}
-{addMode && newLocation && (
-  <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-yellow-200 text-yellow-800 px-4 py-2 rounded-lg shadow-md flex items-center gap-2 text-sm md:text-base">
-    <Info size={18} />
-    Click on the pinned location to fill in shelter details and save.
-  </div>
+        {/* Instruction 2: Fill in details after selecting location */}
+        {addMode && newLocation && (
+          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] bg-yellow-200 text-yellow-800 px-4 py-2 rounded-lg shadow-md flex items-center gap-2 text-sm md:text-base">
+            <Info size={18} />
+            Click on the pinned location to fill in shelter details and save.
+          </div>
         )}
 
         {/* Add Shelter Button */}
@@ -259,6 +261,13 @@ export default function Shelters() {
           ))
         )}
       </div>
+
+      {/* Success Modal */}
+      <SuccessModal
+        show={showSuccess}
+        message="Shelter added successfully!"
+        onClose={() => setShowSuccess(false)}
+      />
     </div>
   );
 }

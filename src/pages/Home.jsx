@@ -17,16 +17,14 @@ import SuccessModal from "../components/SuccessModal";
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
   state = { hasError: false };
-
-  static getDerivedStateFromError(error) {
+  static getDerivedStateFromError() {
     return { hasError: true };
   }
-
   render() {
     if (this.state.hasError) {
       return (
         <div className="flex items-center justify-center h-screen bg-white">
-          <div className="text-center">
+          <div className="text-center p-4">
             <h2 className="text-xl font-bold text-red-600">
               Something went wrong
             </h2>
@@ -47,12 +45,7 @@ class ErrorBoundary extends React.Component {
 
 // Custom marker icons
 const getMarkerIcon = (type) => {
-  const colors = {
-    High: "red",
-    Medium: "orange",
-    Low: "green",
-    Temp: "blue",
-  };
+  const colors = { High: "red", Medium: "orange", Low: "green", Temp: "blue" };
   return L.divIcon({
     className: "custom-marker",
     html: `<div class="pin" style="background-color: ${colors[type] || "green"}"></div>`,
@@ -65,9 +58,7 @@ const getMarkerIcon = (type) => {
 const MapClickHandler = ({ modalType, setTempMarker }) => {
   useMapEvents({
     click(e) {
-      if (modalType === "pin") {
-        setTempMarker(e.latlng);
-      }
+      if (modalType === "pin") setTempMarker(e.latlng);
     },
   });
   return null;
@@ -82,33 +73,28 @@ export default function Home() {
     need: "",
     name: "",
     barangay: "",
-    urgency: "Medium",
+    urgency: "",
     location: "",
   });
-  const [selectedRequest, setSelectedRequest] = useState(null);
   const [isLoadingLocation, setIsLoadingLocation] = useState(false);
   const [deleteModal, setDeleteModal] = useState({ show: false, id: null });
   const [showSuccess, setShowSuccess] = useState(false);
+  const [filterUrgency, setFilterUrgency] = useState("");
   const mapRef = useRef();
-
   const defaultCenter = [10.3157, 123.8854];
 
   useEffect(() => {
     let isMounted = true;
-
     fetchRequests();
+
     const channel = supabase
       .channel("requests-changes")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "requests" },
-        () => {
-          if (isMounted) fetchRequests();
-        }
+        () => { if (isMounted) fetchRequests(); }
       )
-      .subscribe((status, err) => {
-        if (err) console.error("Subscription error:", err);
-      });
+      .subscribe((status, err) => { if (err) console.error("Subscription error:", err); });
 
     return () => {
       isMounted = false;
@@ -117,45 +103,23 @@ export default function Home() {
   }, []);
 
   const fetchRequests = async () => {
-    const { data, error } = await supabase
-      .from("requests")
-      .select("*")
-      .order("created_at", { ascending: false });
+    const { data, error } = await supabase.from("requests").select("*").order("created_at", { ascending: false });
     if (error) console.error("Error fetching requests:", error);
     else setRequests(data || []);
   };
 
-  const handleRequestClick = () => {
+  const handleLocationClick = (type) => {
     if (!navigator.geolocation) return alert("Geolocation not supported.");
     setIsLoadingLocation(true);
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
         if (map) map.setView([coords.latitude, coords.longitude], 15);
         setTempMarker({ lat: coords.latitude, lng: coords.longitude });
-        setModalType("request");
+        setModalType(type);
         setIsLoadingLocation(false);
       },
       (err) => {
-        console.error(err);
-        alert("Please allow location access.");
-        setIsLoadingLocation(false);
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-    );
-  };
-
-  const handlePinLocation = () => {
-    if (!navigator.geolocation) return alert("Geolocation not supported.");
-    setIsLoadingLocation(true);
-    navigator.geolocation.getCurrentPosition(
-      ({ coords }) => {
-        if (map) map.setView([coords.latitude, coords.longitude], 15);
-        setTempMarker({ lat: coords.latitude, lng: coords.longitude });
-        setModalType("pin");
-        setIsLoadingLocation(false);
-      },
-      (err) => {
-        console.error(err);
+        console.error("Geolocation error:", err);
         alert("Please allow location access.");
         setIsLoadingLocation(false);
       },
@@ -165,104 +129,69 @@ export default function Home() {
 
   const handleSubmit = async () => {
     if (modalType !== "request") return;
-    if (!formData.need || !formData.name || !formData.barangay)
-      return alert("Please fill in all fields.");
-
+    if (!formData.need || !formData.name || !formData.barangay || !formData.urgency) {
+      return alert("Please fill in all fields, including urgency level.");
+    }
     try {
-      const { data, error } = await supabase.from("requests").insert([
-        {
-          need: formData.need,
-          name: formData.name,
-          barangay: formData.barangay,
-          urgency: formData.urgency,
-          lat: tempMarker?.lat || null,
-          lng: tempMarker?.lng || null,
-          created_at: new Date().toISOString(),
-        },
-      ]);
+      const { data, error } = await supabase.from("requests").insert([{
+        ...formData,
+        lat: tempMarker?.lat || null,
+        lng: tempMarker?.lng || null,
+        created_at: new Date().toISOString(),
+      }]);
       if (error) throw error;
-
-      // Immediately update state with new request
-      if (data && data.length > 0) {
-        setRequests((prev) => [data[0], ...prev]);
-      } else {
-        // Fallback to re-fetch if data is not returned
-        await fetchRequests();
-      }
-
-      // Reset form and states
-      setFormData({ need: "", name: "", barangay: "", urgency: "Medium", location: "" });
+      setRequests(prev => data && data.length ? [data[0], ...prev] : prev);
+      setFormData({ need: "", name: "", barangay: "", urgency: "", location: "" });
       setModalType(null);
       setTempMarker(null);
       setShowSuccess(true);
     } catch (err) {
-      console.error(err);
+      console.error("Submission error:", err);
       alert("Failed to submit request: " + err.message);
     }
   };
 
   const promptDelete = (id) => setDeleteModal({ show: true, id });
-
   const confirmDelete = async () => {
-    const id = deleteModal.id;
-    const { error } = await supabase.from("requests").delete().eq("id", id);
+    const { error } = await supabase.from("requests").delete().eq("id", deleteModal.id);
     if (error) alert("Failed to delete: " + error.message);
-    else setRequests((prev) => prev.filter((r) => r.id !== id));
+    else setRequests(prev => prev.filter(r => r.id !== deleteModal.id));
     setDeleteModal({ show: false, id: null });
   };
 
-  const handleSuccessClose = () => {
-    setShowSuccess(false);
-    fetchRequests(); // Re-fetch to ensure data sync
+  const panToRequest = (req) => {
+    if (mapRef.current && req.lat && req.lng) mapRef.current.flyTo([req.lat, req.lng], 15, { duration: 1.5 });
+    else if (mapRef.current) mapRef.current.flyTo(defaultCenter, 11, { duration: 1.5 });
   };
+
+  const filteredRequests = filterUrgency ? requests.filter(r => r.urgency === filterUrgency) : requests;
 
   return (
     <ErrorBoundary>
       <div className="flex flex-col h-screen overflow-hidden">
-        {/* Responsive Map & Feed */}
         <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
           {/* Map */}
-          <div className="relative flex-1 h-96 md:h-full">
-            <MapContainer
-              ref={mapRef}
-              center={defaultCenter}
-              zoom={11}
-              className="h-full w-full"
-              whenCreated={setMap}
-            >
+          <div className="relative flex-1 h-64 md:h-full">
+            <MapContainer ref={mapRef} center={defaultCenter} zoom={11} className="h-full w-full" whenCreated={setMap}>
               <TileLayer
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               />
-              {requests.map((req) => (
+              {requests.map(req => (
                 <Marker
                   key={req.id}
                   position={[req.lat || defaultCenter[0], req.lng || defaultCenter[1]]}
                   icon={getMarkerIcon(req.urgency)}
-                  eventHandlers={{ click: () => setSelectedRequest(req) }}
                 >
                   <Popup>
                     <div className="p-2">
                       <h3 className="font-bold text-red-700">{req.need}</h3>
                       <p>{req.name} ({req.barangay})</p>
-                      <p
-                        className="font-semibold mt-1"
-                        style={{
-                          color:
-                            req.urgency === "High"
-                              ? "#ef4444"
-                              : req.urgency === "Medium"
-                              ? "#f59e0b"
-                              : "#10b981",
-                        }}
-                      >
-                        Urgency: {req.urgency}
-                      </p>
-                      {req.created_at && (
-                        <p className="text-xs text-gray-500 mt-1">
-                          Added: {new Date(req.created_at).toLocaleString()}
-                        </p>
-                      )}
+                      <p className="font-semibold mt-1" style={{
+                        color: req.urgency === "High" ? "#ef4444" :
+                               req.urgency === "Medium" ? "#f59e0b" : "#10b981"
+                      }}>Urgency: {req.urgency}</p>
+                      {req.created_at && <p className="text-xs text-gray-500 mt-1">Added: {new Date(req.created_at).toLocaleString()}</p>}
                     </div>
                   </Popup>
                 </Marker>
@@ -275,17 +204,38 @@ export default function Home() {
               <MapClickHandler modalType={modalType} setTempMarker={setTempMarker} />
             </MapContainer>
 
-            {/* Centered Floating Buttons */}
-            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-50">
-              <QuickLinks onRequest={handleRequestClick} onPin={handlePinLocation} />
+           {/* Map Legend - Left center with glassy effect */}
+<div className="absolute left-4 top-1/2 transform -translate-y-1/2 z-50">
+  <div className="bg-white/30 backdrop-blur-sm p-3 rounded-lg shadow-lg border border-white/20">
+    <h3 className="text-sm font-semibold mb-2">Urgency Legend</h3>
+    <ul className="text-xs space-y-1">
+      <li><span className="inline-block w-3 h-3 bg-red-500 rounded-full mr-2"></span>High Urgency (Priority)</li>
+      <li><span className="inline-block w-3 h-3 bg-orange-500 rounded-full mr-2"></span>Medium Urgency</li>
+      <li><span className="inline-block w-3 h-3 bg-green-500 rounded-full mr-2"></span>Low Urgency</li>
+      <li><span className="inline-block w-3 h-3 bg-blue-500 rounded-full mr-2"></span>Temporary Pin</li>
+    </ul>
+  </div>
+</div>
+
+
+
+            {/* Floating Buttons */}
+            <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-50 flex justify-center">
+              <QuickLinks onRequest={() => handleLocationClick("request")} onPin={() => handleLocationClick("pin")} />
             </div>
 
-            {/* Loading */}
+            {/* Loading Overlay */}
             {isLoadingLocation && (
-              <div className="fixed inset-0 flex items-center justify-center z-50">
-                <div className="bg-white p-4 rounded-lg shadow-lg text-center">
-                  <p className="text-lg font-semibold">Locating your position...</p>
-                  <div className="mt-2 animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+              <div className="fixed inset-0 flex items-center justify-center z-50 bg-transparent">
+                <div className="bg-white/80 p-6 rounded-xl shadow-xl text-center animate-pulseOnce">
+                  <div className="flex justify-center mb-4">
+                    <div className="relative">
+                      <div className="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-red-500"></div>
+                      <div className="absolute top-0 left-0 h-12 w-12 rounded-full border-t-4 border-b-4 border-gray-200 animate-pulse"></div>
+                    </div>
+                  </div>
+                  <p className="text-xl font-bold text-gray-800 mb-2">Locating...</p>
+                  <p className="text-sm text-gray-600">Please wait while we find your position.</p>
                 </div>
               </div>
             )}
@@ -309,87 +259,44 @@ export default function Home() {
             <SuccessModal
               show={showSuccess}
               message="Help request submitted successfully!"
-              onClose={handleSuccessClose}
+              onClose={() => { setShowSuccess(false); fetchRequests(); }}
             />
-
-            {selectedRequest && (
-              <div className="absolute bottom-20 left-5 bg-white shadow-lg p-4 rounded-lg w-72 border z-50">
-                <h3 className="text-lg font-bold text-red-700">{selectedRequest.need}</h3>
-                <p className="text-gray-700">
-                  {selectedRequest.name} ({selectedRequest.barangay})
-                </p>
-                <p
-                  className={`font-semibold mt-2 ${
-                    selectedRequest.urgency === "High"
-                      ? "text-red-600"
-                      : selectedRequest.urgency === "Medium"
-                      ? "text-orange-500"
-                      : "text-green-600"
-                  }`}
-                >
-                  Urgency: {selectedRequest.urgency}
-                </p>
-                {selectedRequest.created_at && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Added: {new Date(selectedRequest.created_at).toLocaleString()}
-                  </p>
-                )}
-                <div className="flex justify-between mt-3">
-                  <button
-                    className="px-3 py-1 bg-gray-200 hover:bg-gray-300 rounded"
-                    onClick={() => setSelectedRequest(null)}
-                  >
-                    Close
-                  </button>
-                  <button
-                    className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700"
-                    onClick={() => promptDelete(selectedRequest.id)}
-                  >
-                    Delete
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Requests Feed */}
-          <div className="w-full md:w-80 bg-white shadow-md p-4 overflow-y-auto flex-shrink-0 pt-4 md:pt-16">
+          <div className="w-full md:w-80 bg-white shadow-md p-4 pr-6 overflow-y-auto flex-shrink-0 pt-16">
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Urgency</label>
+              <select
+                value={filterUrgency}
+                onChange={(e) => setFilterUrgency(e.target.value)}
+                className="w-full p-2 border rounded md:w-48"
+              >
+                <option value="">All</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </div>
             <h2 className="text-lg font-bold text-red-700 mb-4">Requests</h2>
-            {requests.length === 0 ? (
-              <p className="text-gray-500">No requests yet.</p>
+            {filteredRequests.length === 0 ? (
+              <p className="text-gray-500">No requests match the filter.</p>
             ) : (
-              requests.map((req) => (
+              filteredRequests.map(req => (
                 <div
                   key={req.id}
                   className="mb-3 p-3 border rounded-lg shadow-sm bg-gray-50 cursor-pointer hover:bg-gray-100"
-                  onClick={() => setSelectedRequest(req)}
+                  onClick={() => panToRequest(req)}
                 >
                   <p className="font-semibold">{req.need}</p>
-                  <p className="text-sm text-gray-600">
-                    {req.name} - {req.barangay}
-                  </p>
-                  <p
-                    className={`text-xs font-bold ${
-                      req.urgency === "High"
-                        ? "text-red-600"
-                        : req.urgency === "Medium"
-                        ? "text-orange-500"
-                        : "text-green-600"
-                    }`}
-                  >
+                  <p className="text-sm text-gray-600">{req.name} - {req.barangay}</p>
+                  <p className={`text-xs font-bold ${req.urgency === "High" ? "text-red-600" : req.urgency === "Medium" ? "text-orange-500" : "text-green-600"}`}>
                     Urgency: {req.urgency}
                   </p>
-                  {req.created_at && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Added: {new Date(req.created_at).toLocaleString()}
-                    </p>
-                  )}
+                  {req.created_at && <p className="text-xs text-gray-500 mt-1">Added: {new Date(req.created_at).toLocaleString()}</p>}
                   <button
                     className="mt-2 px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      promptDelete(req.id);
-                    }}
+                    onClick={(e) => { e.stopPropagation(); promptDelete(req.id); }}
                   >
                     Delete
                   </button>
