@@ -4,6 +4,7 @@ import {
   TileLayer,
   Marker,
   Popup,
+  Circle,
   useMapEvents,
 } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -13,6 +14,12 @@ import QuickLinks from "../components/QuickLinks";
 import RequestHelpModal from "../components/RequestHelpModal";
 import DeleteModal from "../components/DeleteModal";
 import SuccessModal from "../components/SuccessModal";
+
+// 🌋 APIs
+const EARTHQUAKE_API =
+  "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson";
+const TYPHOON_API =
+  "https://api.met.no/weatherapi/tropicalcyclone/1.0/?content_type=json";
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -68,6 +75,14 @@ const MapClickHandler = ({ modalType, setTempMarker }) => {
   return null;
 };
 
+// 🌋 Color scale for earthquake magnitude
+const getMagnitudeColor = (mag) => {
+  if (mag >= 6) return "#ff0000"; // red - strong
+  if (mag >= 4) return "#ff6600"; // orange
+  if (mag >= 2.5) return "#ffcc00"; // yellow
+  return "#00cc44"; // green - weak
+};
+
 export default function Home() {
   const [requests, setRequests] = useState([]);
   const [map, setMap] = useState(null);
@@ -83,10 +98,14 @@ export default function Home() {
   const [deleteModal, setDeleteModal] = useState({ show: false, id: null });
   const [showSuccess, setShowSuccess] = useState(false);
   const [filterUrgency, setFilterUrgency] = useState("");
-  const [errorMessage, setErrorMessage] = useState(""); // ✅ error toast state
+  const [errorMessage, setErrorMessage] = useState("");
+  const [earthquakes, setEarthquakes] = useState([]);
+  const [typhoons, setTyphoons] = useState([]);
+
   const mapRef = useRef();
   const defaultCenter = [10.3157, 123.8854];
 
+  // 🔥 Fetch Supabase requests + realtime updates
   useEffect(() => {
     let isMounted = true;
     fetchRequests();
@@ -110,7 +129,38 @@ export default function Home() {
     };
   }, []);
 
-  // auto-hide error toast after 3s
+  // 🌋 Fetch Earthquake + Typhoon Data
+  useEffect(() => {
+    const fetchEarthquakes = async () => {
+      try {
+        const res = await fetch(EARTHQUAKE_API);
+        const data = await res.json();
+        setEarthquakes(data.features || []);
+      } catch (err) {
+        console.error("Error fetching earthquakes:", err);
+      }
+    };
+
+    const fetchTyphoons = async () => {
+      try {
+        const res = await fetch(TYPHOON_API);
+        const data = await res.json();
+        setTyphoons(data?.tropicalcyclones || []);
+      } catch (err) {
+        console.error("Error fetching typhoons:", err);
+      }
+    };
+
+    fetchEarthquakes();
+    fetchTyphoons();
+    const interval = setInterval(() => {
+      fetchEarthquakes();
+      fetchTyphoons();
+    }, 600000); // refresh every 10 min
+    return () => clearInterval(interval);
+  }, []);
+
+  // Auto-hide error toast
   useEffect(() => {
     if (errorMessage) {
       const timer = setTimeout(() => setErrorMessage(""), 3000);
@@ -128,7 +178,8 @@ export default function Home() {
   };
 
   const handleLocationClick = (type) => {
-    if (!navigator.geolocation) return setErrorMessage("⚠️ Geolocation not supported.");
+    if (!navigator.geolocation)
+      return setErrorMessage("⚠️ Geolocation not supported.");
     setIsLoadingLocation(true);
     navigator.geolocation.getCurrentPosition(
       ({ coords }) => {
@@ -154,7 +205,7 @@ export default function Home() {
       !formData.barangay ||
       !formData.urgency
     ) {
-      setErrorMessage("⚠️ Please fill in all fields, including urgency level."); // ✅ replaced alert
+      setErrorMessage("⚠️ Please fill in all fields, including urgency level.");
       return;
     }
     try {
@@ -176,7 +227,7 @@ export default function Home() {
       setShowSuccess(true);
     } catch (err) {
       console.error("Submission error:", err);
-      setErrorMessage("❌ Failed to submit request: " + err.message); // ✅ replaced alert
+      setErrorMessage("❌ Failed to submit request: " + err.message);
     }
   };
 
@@ -186,7 +237,7 @@ export default function Home() {
       .from("requests")
       .delete()
       .eq("id", deleteModal.id);
-    if (error) setErrorMessage("❌ Failed to delete: " + error.message); // ✅ replaced alert
+    if (error) setErrorMessage("❌ Failed to delete: " + error.message);
     else setRequests((prev) => prev.filter((r) => r.id !== deleteModal.id));
     setDeleteModal({ show: false, id: null });
   };
@@ -218,7 +269,7 @@ export default function Home() {
             <MapContainer
               ref={mapRef}
               center={defaultCenter}
-              zoom={11}
+              zoom={6}
               className="h-full w-full"
               whenCreated={setMap}
             >
@@ -226,6 +277,60 @@ export default function Home() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               />
+
+              {/* 🌋 Earthquake Sonar Markers */}
+{earthquakes.map((eq, i) => {
+  const [lng, lat] = eq.geometry.coordinates;
+  const mag = eq.properties.mag || 0;
+  const color = getMagnitudeColor(mag);
+
+  const sonarIcon = L.divIcon({
+    className: "",
+    html: `
+      <div class="sonar-container">
+        <div class="sonar-wave" style="background-color: ${color}; animation-delay: 0s"></div>
+        <div class="sonar-wave" style="background-color: ${color}; animation-delay: 0.8s"></div>
+        <div class="sonar-wave" style="background-color: ${color}; animation-delay: 1.6s"></div>
+      </div>
+    `,
+    iconSize: [20, 20],
+  });
+
+  return (
+    <Marker key={i} position={[lat, lng]} icon={sonarIcon}>
+      <Popup>
+        <strong>Magnitude:</strong> {mag} <br />
+        <strong>Location:</strong> {eq.properties.place}
+      </Popup>
+    </Marker>
+  );
+})}
+
+
+              {/* 🌀 Typhoon Circles */}
+              {typhoons.map((storm, i) => {
+                const { center } = storm || {};
+                if (!center?.latitude || !center?.longitude) return null;
+                return (
+                  <Circle
+                    key={i}
+                    center={[center.latitude, center.longitude]}
+                    radius={100000}
+                    pathOptions={{
+                      color: "blue",
+                      fillColor: "blue",
+                      fillOpacity: 0.25,
+                    }}
+                  >
+                    <Popup>
+                      <b>Typhoon:</b> {storm.name || "Unnamed"} <br />
+                      <b>Category:</b> {storm.intensity || "Unknown"}
+                    </Popup>
+                  </Circle>
+                );
+              })}
+
+              {/* Request Markers */}
               {requests.map((req) => (
                 <Marker
                   key={req.id}
