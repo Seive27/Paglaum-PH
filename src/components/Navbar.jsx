@@ -8,7 +8,7 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const navLinks = [
-    { to: "/", label: "Home" },
+    { to: "/", label: "Crisis Map" },
     { to: "/requests", label: "Requests" },
     { to: "/shelters", label: "Shelters" },
     { to: "/family-locator", label: "Find My Family" },
